@@ -3,6 +3,7 @@
 import config from '../config'
 import { warn } from './debug'
 import { inBrowser, inWeex } from './env'
+import { isPromise } from './lang'
 
 export function handleError (err: Error, vm: any, info: string) {
   if (vm) {
@@ -22,6 +23,14 @@ export function handleError (err: Error, vm: any, info: string) {
     }
   }
   globalHandleError(err, vm, info)
+}
+
+export function checkForAsyncError (value: any, vm: any, info: string) {
+  if (value != null && isPromise(value) && typeof value.catch === 'function') {
+    value.catch(function (err: Error) {
+      handleError(err, vm, info)
+    })
+  }
 }
 
 function globalHandleError (err, vm, info) {
