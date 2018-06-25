@@ -32,7 +32,13 @@ export function createFnInvoker (fns: Function | Array<Function>, vm: ?Component
     if (Array.isArray(fns)) {
       const cloned = fns.slice()
       for (let i = 0; i < cloned.length; i++) {
-        cloned[i].apply(null, arguments)
+        let result = null
+        try {
+          result = cloned[i].apply(null, arguments)
+        } catch (e) {
+          handleError(e, vm, 'v-on')
+        }
+        checkForAsyncError(result, vm, 'v-on async')
       }
     } else {
       // return handler return value for single handlers

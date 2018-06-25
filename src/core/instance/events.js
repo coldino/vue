@@ -5,6 +5,7 @@ import {
   toArray,
   hyphenate,
   handleError,
+  checkForAsyncError,
   formatComponentName
 } from '../util/index'
 import { updateListeners } from '../vdom/helpers/index'
@@ -130,11 +131,13 @@ export function eventsMixin (Vue: Class<Component>) {
       cbs = cbs.length > 1 ? toArray(cbs) : cbs
       const args = toArray(arguments, 1)
       for (let i = 0, l = cbs.length; i < l; i++) {
+        let result = null
         try {
-          cbs[i].apply(vm, args)
+          result = cbs[i].apply(vm, args)
         } catch (e) {
           handleError(e, vm, `event handler for "${event}"`)
         }
+        checkForAsyncError(result, vm, `event handler for "${event}" async`)
       }
     }
     return vm

@@ -2,7 +2,7 @@
 /* globals MessageChannel */
 
 import { noop } from 'shared/util'
-import { handleError } from './error'
+import { handleError, checkForAsyncError } from './error'
 import { isIOS, isNative } from './env'
 
 const callbacks = []
@@ -91,11 +91,13 @@ export function nextTick (cb?: Function, ctx?: Object) {
   let _resolve
   callbacks.push(() => {
     if (cb) {
+      let result = null
       try {
-        cb.call(ctx)
+        result = cb.call(ctx)
       } catch (e) {
         handleError(e, ctx, 'nextTick')
       }
+      checkForAsyncError(result, null, `nextTick async`)
     } else if (_resolve) {
       _resolve(ctx)
     }

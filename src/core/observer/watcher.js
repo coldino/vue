@@ -6,7 +6,8 @@ import {
   isObject,
   parsePath,
   _Set as Set,
-  handleError
+  handleError,
+  checkForAsyncError
 } from '../util/index'
 
 import { traverse } from './traverse'
@@ -216,11 +217,13 @@ export default class Watcher {
       this.value = value
       this.dirty = false
       if (this.user) {
+        let result = null
         try {
-          cb.call(this.vm, value, oldValue)
+          result = cb.call(this.vm, value, oldValue)
         } catch (e) {
           handleError(e, this.vm, `callback for watcher "${this.expression}"`)
         }
+        checkForAsyncError(result, this.vm, `callback for watcher "${this.expression}" async`)
       } else {
         cb.call(this.vm, value, oldValue)
       }

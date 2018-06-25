@@ -15,7 +15,8 @@ import {
   remove,
   handleError,
   emptyObject,
-  validateProp
+  validateProp,
+  checkForAsyncError
 } from '../util/index'
 
 export let activeInstance: any = null
@@ -318,11 +319,13 @@ export function callHook (vm: Component, hook: string) {
   const handlers = vm.$options[hook]
   if (handlers) {
     for (let i = 0, j = handlers.length; i < j; i++) {
+      let result = null
       try {
-        handlers[i].call(vm)
+        result = handlers[i].call(vm)
       } catch (e) {
         handleError(e, vm, `${hook} hook`)
       }
+      checkForAsyncError(result, vm, `${hook} hook async`)
     }
   }
   if (vm._hasHookEvent) {
