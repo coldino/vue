@@ -603,6 +603,15 @@ function def (obj, key, val, enumerable) {
   });
 }
 
+
+
+/**
+ * Check if the value is Promise-like
+ */
+function isPromise (obj) {
+  return !!obj && (typeof obj === 'object' || typeof obj === 'function') && typeof obj.then === 'function'
+}
+
 /*  */
 
 // can we use __proto__?
@@ -1842,6 +1851,14 @@ function handleError (err, vm, info) {
     }
   }
   globalHandleError(err, vm, info);
+}
+
+function checkForAsyncError (value, vm, info) {
+  if (value != null && isPromise(value) && typeof value.catch === 'function') {
+    value.catch(function (err) {
+      handleError(err, vm, info);
+    });
+  }
 }
 
 function globalHandleError (err, vm, info) {
@@ -5956,7 +5973,7 @@ var normalizeEvent = cached(function (name) {
   }
 });
 
-function createFnInvoker (fns) {
+function createFnInvoker (fns, vm) {
   function invoker () {
     var arguments$1 = arguments;
 
@@ -5964,11 +5981,24 @@ function createFnInvoker (fns) {
     if (Array.isArray(fns)) {
       var cloned = fns.slice();
       for (var i = 0; i < cloned.length; i++) {
-        cloned[i].apply(null, arguments$1);
+        var result = null;
+        try {
+          result = cloned[i].apply(null, arguments$1);
+        } catch (e) {
+          handleError(e, vm, 'v-on');
+        }
+        checkForAsyncError(result, vm, 'v-on async');
       }
     } else {
       // return handler return value for single handlers
-      return fns.apply(null, arguments)
+      var result$1 = null;
+      try {
+        result$1 = fns.apply(null, arguments);
+      } catch (e) {
+        handleError(e, vm, 'v-on');
+      }
+      checkForAsyncError(result$1, vm, 'v-on async');
+      return result$1
     }
   }
   invoker.fns = fns;
@@ -5995,7 +6025,7 @@ function updateListeners (
       );
     } else if (isUndef(old)) {
       if (isUndef(cur.fns)) {
-        cur = on[name] = createFnInvoker(cur);
+        cur = on[name] = createFnInvoker(cur, vm);
       }
       add(event.name, cur, event.once, event.capture, event.passive, event.params);
     } else if (cur !== old) {
@@ -6434,11 +6464,13 @@ function callHook (vm, hook) {
   var handlers = vm.$options[hook];
   if (handlers) {
     for (var i = 0, j = handlers.length; i < j; i++) {
+      var result = null;
       try {
-        handlers[i].call(vm);
+        result = handlers[i].call(vm);
       } catch (e) {
         handleError(e, vm, (hook + " hook"));
       }
+      checkForAsyncError(result, vm, (hook + " hook async"));
     }
   }
   if (vm._hasHookEvent) {
@@ -8022,13 +8054,21 @@ TemplateRenderer.prototype.renderSync = function renderSync (content, context) {
 TemplateRenderer.prototype.renderStyles = function renderStyles (context) {
     var this$1 = this;
 
-  var cssFiles = this.clientManifest
-    ? this.clientManifest.all.filter(isCSS)
-    : [];
+  var initial = this.preloadFiles || [];
+  var async = this.getUsedAsyncFiles(context) || [];
+  var cssFiles = initial.concat(async).filter(function (ref) {
+      var file = ref.file;
+
+      return isCSS(file);
+    });
   return (
     // render links for css files
     (cssFiles.length
-      ? cssFiles.map(function (file) { return ("<link rel=\"stylesheet\" href=\"" + (this$1.publicPath) + "/" + file + "\">"); }).join('')
+      ? cssFiles.map(function (ref) {
+          var file = ref.file;
+
+          return ("<link rel=\"stylesheet\" href=\"" + (this$1.publicPath) + "/" + file + "\">");
+    }).join('')
       : '') +
     // context.styles is a getter exposed by vue-style-loader which contains
     // the inline component styles collected during SSR
@@ -8124,14 +8164,18 @@ TemplateRenderer.prototype.renderScripts = function renderScripts (context) {
     var this$1 = this;
 
   if (this.clientManifest) {
-    var initial = this.preloadFiles;
-    var async = this.getUsedAsyncFiles(context);
-    var needed = [initial[0]].concat(async || [], initial.slice(1));
-    return needed.filter(function (ref) {
+    var initial = this.preloadFiles.filter(function (ref) {
         var file = ref.file;
 
         return isJS(file);
-      }).map(function (ref) {
+      });
+    var async = (this.getUsedAsyncFiles(context) || []).filter(function (ref) {
+        var file = ref.file;
+
+        return isJS(file);
+      });
+    var needed = [initial[0]].concat(async || [], initial.slice(1));
+    return needed.map(function (ref) {
         var file = ref.file;
 
       return ("<script src=\"" + (this$1.publicPath) + "/" + file + "\" defer></script>")

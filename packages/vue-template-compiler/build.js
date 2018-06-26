@@ -711,6 +711,12 @@ function def (obj, key, val, enumerable) {
   });
 }
 
+
+
+/**
+ * Check if the value is Promise-like
+ */
+
 /*  */
 
 // can we use __proto__?

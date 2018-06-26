@@ -476,6 +476,13 @@ function parsePath (path) {
   }
 }
 
+/**
+ * Check if the value is Promise-like
+ */
+function isPromise (obj) {
+  return !!obj && (typeof obj === 'object' || typeof obj === 'function') && typeof obj.then === 'function'
+}
+
 /*  */
 
 // can we use __proto__?
@@ -1718,6 +1725,14 @@ function handleError (err, vm, info) {
   globalHandleError(err, vm, info);
 }
 
+function checkForAsyncError (value, vm, info) {
+  if (value != null && isPromise(value) && typeof value.catch === 'function') {
+    value.catch(function (err) {
+      handleError(err, vm, info);
+    });
+  }
+}
+
 function globalHandleError (err, vm, info) {
   if (config.errorHandler) {
     try {
@@ -1830,11 +1845,13 @@ function nextTick (cb, ctx) {
   var _resolve;
   callbacks.push(function () {
     if (cb) {
+      var result = null;
       try {
-        cb.call(ctx);
+        result = cb.call(ctx);
       } catch (e) {
         handleError(e, ctx, 'nextTick');
       }
+      checkForAsyncError(result, null, "nextTick async");
     } else if (_resolve) {
       _resolve(ctx);
     }
@@ -2009,7 +2026,7 @@ var normalizeEvent = cached(function (name) {
   }
 });
 
-function createFnInvoker (fns) {
+function createFnInvoker (fns, vm) {
   function invoker () {
     var arguments$1 = arguments;
 
@@ -2017,11 +2034,24 @@ function createFnInvoker (fns) {
     if (Array.isArray(fns)) {
       var cloned = fns.slice();
       for (var i = 0; i < cloned.length; i++) {
-        cloned[i].apply(null, arguments$1);
+        var result = null;
+        try {
+          result = cloned[i].apply(null, arguments$1);
+        } catch (e) {
+          handleError(e, vm, 'v-on');
+        }
+        checkForAsyncError(result, vm, 'v-on async');
       }
     } else {
       // return handler return value for single handlers
-      return fns.apply(null, arguments)
+      var result$1 = null;
+      try {
+        result$1 = fns.apply(null, arguments);
+      } catch (e) {
+        handleError(e, vm, 'v-on');
+      }
+      checkForAsyncError(result$1, vm, 'v-on async');
+      return result$1
     }
   }
   invoker.fns = fns;
@@ -2048,7 +2078,7 @@ function updateListeners (
       );
     } else if (isUndef(old)) {
       if (isUndef(cur.fns)) {
-        cur = on[name] = createFnInvoker(cur);
+        cur = on[name] = createFnInvoker(cur, vm);
       }
       add(event.name, cur, event.once, event.capture, event.passive, event.params);
     } else if (cur !== old) {
@@ -2531,11 +2561,13 @@ function eventsMixin (Vue) {
       cbs = cbs.length > 1 ? toArray(cbs) : cbs;
       var args = toArray(arguments, 1);
       for (var i = 0, l = cbs.length; i < l; i++) {
+        var result = null;
         try {
-          cbs[i].apply(vm, args);
+          result = cbs[i].apply(vm, args);
         } catch (e) {
           handleError(e, vm, ("event handler for \"" + event + "\""));
         }
+        checkForAsyncError(result, vm, ("event handler for \"" + event + "\" async"));
       }
     }
     return vm
@@ -2910,11 +2942,13 @@ function callHook (vm, hook) {
   var handlers = vm.$options[hook];
   if (handlers) {
     for (var i = 0, j = handlers.length; i < j; i++) {
+      var result = null;
       try {
-        handlers[i].call(vm);
+        result = handlers[i].call(vm);
       } catch (e) {
         handleError(e, vm, (hook + " hook"));
       }
+      checkForAsyncError(result, vm, (hook + " hook async"));
     }
   }
   if (vm._hasHookEvent) {
@@ -3253,11 +3287,13 @@ Watcher.prototype.getAndInvoke = function getAndInvoke (cb) {
     this.value = value;
     this.dirty = false;
     if (this.user) {
+      var result = null;
       try {
-        cb.call(this.vm, value, oldValue);
+        result = cb.call(this.vm, value, oldValue);
       } catch (e) {
         handleError(e, this.vm, ("callback for watcher \"" + (this.expression) + "\""));
       }
+      checkForAsyncError(result, this.vm, ("callback for watcher \"" + (this.expression) + "\" async"));
     } else {
       cb.call(this.vm, value, oldValue);
     }
@@ -6309,11 +6345,13 @@ function getRawDirName (dir) {
 function callHook$1 (dir, hook, vnode, oldVnode, isDestroy) {
   var fn = dir.def && dir.def[hook];
   if (fn) {
+    var result = null;
     try {
-      fn(vnode.elm, dir, vnode, oldVnode, isDestroy);
+      result = fn(vnode.elm, dir, vnode, oldVnode, isDestroy);
     } catch (e) {
       handleError(e, vnode.context, ("directive " + (dir.name) + " " + hook + " hook"));
     }
+    checkForAsyncError(result, null, ("directive " + (dir.name) + " " + hook + " hook async"));
   }
 }
 
